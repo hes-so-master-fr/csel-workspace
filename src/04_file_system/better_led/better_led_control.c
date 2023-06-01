@@ -19,7 +19,7 @@
  *
  * Purpose: NanoPi status led control system
  *
- * Autĥor:  Julien Piguet
+ * Autĥor:  Julien Piguet & Antoine Delabays
  * Date:    28.04.2023
  */
 
@@ -33,6 +33,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <syslog.h>
 
 /*
  * status led - gpioa.10 --> gpio10
@@ -132,6 +133,15 @@ int create_tfd(){
     return tfd;
 }
 
+int create_epoll(){
+    int epollfd = epoll_create1(0);
+    if (epollfd == -1) {
+        perror("epoll_create1");
+        exit(EXIT_FAILURE);
+    }
+    return epollfd;
+}
+
 int set_tfd_interval(int tfd, long sec, long nsec){
     struct itimerspec new_value;
     struct timespec now;
@@ -156,6 +166,7 @@ int set_tfd_interval(int tfd, long sec, long nsec){
 int set_tfd_freq(int tfd, long period){
     long sec = period / 1000;
     long nsec = (period % 1000) * 1000000;
+    syslog(LOG_INFO, "Set frequence to %f", (double)period / 1000.0);
     return set_tfd_interval(tfd, sec, nsec);
 }
 
@@ -172,21 +183,14 @@ int main(int argc, char* argv[])
     k2 = open_gpio(K2, GPIO_K2, "in", "rising");
     k3 = open_gpio(K3, GPIO_K3, "in", "rising");
 
-    int tfd;
-    
-    tfd = create_tfd();
-    set_tfd_freq(tfd, init_period);
-
-    int epollfd, nfds;
+    int tfd, epollfd, nfds;
     struct epoll_event evt1, ret;
     struct epoll_event evk1, evk2, evk3;
 
-    epollfd = epoll_create1(0);
-    if (epollfd == -1) {
-        perror("epoll_create1");
-        exit(EXIT_FAILURE);
-    }
-
+    openlog ("betterled", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_USER);
+    tfd = create_tfd();
+    set_tfd_freq(tfd, init_period);
+    epollfd = create_epoll();
     register_fd_event(epollfd, tfd, EPOLLIN, &evt1);
     register_fd_event(epollfd, k1, EPOLLIN | EPOLLET, &evk1);
     register_fd_event(epollfd, k2, EPOLLIN | EPOLLET, &evk2);   
