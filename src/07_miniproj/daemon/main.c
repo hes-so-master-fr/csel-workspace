@@ -34,7 +34,7 @@ const int size            = SPEED_ARR_SIZE;
 int speed[SPEED_ARR_SIZE] = {2, 5, 10, 20};
 int idx;
 
-static void set_drv_mode(enum mode mode_to_set) {
+void set_drv_mode(enum mode mode_to_set) {
     char* curmode = (mode_to_set == manual) ? "manual\n" : "automatic\n";
     int fd = open(MODE_PATH, O_WRONLY);
     write(fd, curmode, strlen(curmode));
@@ -42,7 +42,7 @@ static void set_drv_mode(enum mode mode_to_set) {
 
 }
 
-static void set_drv_speed(int curr_speed) {
+void set_drv_speed(int curr_speed) {
     char str_speed[10];
     sprintf(str_speed, "%d", curr_speed);
     int fd = open(SPEED_PATH, O_WRONLY);
@@ -51,7 +51,7 @@ static void set_drv_speed(int curr_speed) {
     close(fd);
 }
 
-static int get_drv_speed() {
+int get_drv_speed() {
     char sspeed[10];
     int ispeed = 0;
     int fd = open(SPEED_PATH, O_RDONLY);
@@ -64,30 +64,30 @@ static int get_drv_speed() {
 }
 
 
-static enum mode get_mode() { return current; }
+enum mode get_mode() { return current; }
 
 
-static void set_auto() { 
+void set_auto() { 
 current = automatic; 
 idx=SPEED_ARR_SIZE;
-set_drv_mode(get_mode());
+set_drv_mode(automatic);
  }
 
-static void set_manual() { 
+void set_manual() { 
 current = manual; 
 idx=0;
-set_drv_mode(get_mode()); 
+set_drv_mode(manual); 
 }
 
 
-static int get_speed() { 
+ int get_speed() { 
     if(get_mode()== automatic){
         return get_drv_speed();
     }
     return speed[idx]; 
     }
 
-static int set_speed_up()
+ int set_speed_up()
 {
     if (idx == size - 1) {
         return speed[idx];
@@ -96,7 +96,7 @@ static int set_speed_up()
     }
     return speed[idx];
 }
-static int set_speed_down()
+int set_speed_down()
 {
     if (idx == 0) {
         return speed[idx];
@@ -106,7 +106,7 @@ static int set_speed_down()
     return speed[idx];
 }
 
-static int read_temp(int fd)
+int read_temp(int fd)
 {
     char stemp[10];
     int temp = 0;
@@ -118,7 +118,7 @@ static int read_temp(int fd)
     return temp;
 }
 
-static void set_screen()
+ void set_screen()
 {
     ssd1306_set_position(0, 0);
     ssd1306_puts("-System Status-");
@@ -128,7 +128,7 @@ static void set_screen()
     ssd1306_puts("--------------");
 }
 
-static void set_screen_mode(enum mode curr)
+void set_screen_mode(enum mode curr)
 {
     char* curmode = (curr == manual) ? "manual   " : "automatic";
     char mode_buf[50];
@@ -147,7 +147,7 @@ static void set_screen_temp(int temp)
     ssd1306_puts("'C");
 }
 
-static void set_screen_freq(int freq)
+ void set_screen_freq(int freq)
 {
     ssd1306_set_position(0, 5);
     char freq_buf[50];
@@ -157,7 +157,7 @@ static void set_screen_freq(int freq)
     ssd1306_puts("Hz");
 }
 
-static void set_screen_duty(int duty)
+void set_screen_duty(int duty)
 {
     ssd1306_set_position(0, 6);
     char duty_buf[50];
@@ -224,12 +224,13 @@ int process()
             // receive from client program
             int recvlen = mq_receive(mqd, info, mqatt.mq_msgsize, NULL);
             if (recvlen != -1) {
-                if(strncmp("automatic", info, strlen(info))){
+                if(strncmp("automatic", info, strlen("automatic")) == 0){
                      set_auto();
-                     set_screen_mode(get_mode());
-                }else {
-                    set_manual();
-                     set_screen_mode(get_mode());
+                     set_screen_mode(automatic);
+                }
+                if(strncmp("manual", info, strlen("manual")) == 0){
+                      set_manual();
+                     set_screen_mode(manual);
                 }
             }
 
