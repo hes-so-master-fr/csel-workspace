@@ -35,11 +35,9 @@ int speed[SPEED_ARR_SIZE] = {2, 5, 10, 20};
 int idx;
 
 static void set_drv_mode(enum mode mode_to_set) {
-    char* curmode = (mode_to_set == manual) ? "manual   " : "automatic";
+    char* curmode = (mode_to_set == manual) ? "manual\n" : "automatic\n";
     int fd = open(MODE_PATH, O_WRONLY);
-    printf("mode %s\n", curmode);
     int ret = write(fd, curmode, strlen(curmode));
-    printf("written bytes: %d\n", ret);
     close(fd);
 
 }
@@ -47,11 +45,22 @@ static void set_drv_mode(enum mode mode_to_set) {
 static void set_drv_speed(int curr_speed) {
     char str_speed[10];
     sprintf(str_speed, "%d", curr_speed);
-    printf("speed %s\n", str_speed);
     int fd = open(SPEED_PATH, O_WRONLY);
+    str_speed[10] = '\n';
     int ret = write(fd, str_speed, strlen(str_speed));
-    printf("written bytes: %d\n", ret);
     close(fd);
+}
+
+static int get_drv_speed() {
+    char sspeed[10];
+    int ispeed = 0;
+    int fd = open(SPEED_PATH, O_RDONLY);
+    if (fd != -1) {
+        read(fd, &sspeed, sizeof(sspeed));
+        ispeed = atoi(sspeed);
+    }
+    close(fd);
+    return ispeed;
 }
 
 static void set_auto() { current = automatic; }
@@ -60,7 +69,12 @@ static void set_manual() { current = manual; }
 
 static enum mode get_mode() { return current; }
 
-static int get_speed() { return speed[idx]; }
+static int get_speed() { 
+    if(get_mode()== automatic){
+        return get_drv_speed();
+    }
+    return speed[idx]; 
+    }
 
 static int set_speed_up()
 {
@@ -226,6 +240,9 @@ int main()
             (get_mode() == manual) ? set_auto() : set_manual();
             set_drv_mode(get_mode());
             set_screen_mode(get_mode());
+            if(get_mode()==automatic){
+                set_screen_freq(get_speed());
+            }
         }
 
         free(info);
