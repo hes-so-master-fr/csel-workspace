@@ -37,7 +37,7 @@ int idx;
 static void set_drv_mode(enum mode mode_to_set) {
     char* curmode = (mode_to_set == manual) ? "manual\n" : "automatic\n";
     int fd = open(MODE_PATH, O_WRONLY);
-    int ret = write(fd, curmode, strlen(curmode));
+    write(fd, curmode, strlen(curmode));
     close(fd);
 
 }
@@ -47,7 +47,7 @@ static void set_drv_speed(int curr_speed) {
     sprintf(str_speed, "%d", curr_speed);
     int fd = open(SPEED_PATH, O_WRONLY);
     str_speed[10] = '\n';
-    int ret = write(fd, str_speed, strlen(str_speed));
+    write(fd, str_speed, strlen(str_speed));
     close(fd);
 }
 
@@ -63,11 +63,22 @@ static int get_drv_speed() {
     return ispeed;
 }
 
-static void set_auto() { current = automatic; }
-
-static void set_manual() { current = manual; }
 
 static enum mode get_mode() { return current; }
+
+
+static void set_auto() { 
+current = automatic; 
+idx=SPEED_ARR_SIZE;
+set_drv_mode(get_mode());
+ }
+
+static void set_manual() { 
+current = manual; 
+idx=0;
+set_drv_mode(get_mode()); 
+}
+
 
 static int get_speed() { 
     if(get_mode()== automatic){
@@ -156,7 +167,7 @@ static void set_screen_duty(int duty)
     ssd1306_puts("%");
 }
 
-int main()
+int process()
 {
     int fd_temp = open(TEMP_PATH, O_RDONLY);
     if (fd_temp == -1) {
@@ -164,9 +175,12 @@ int main()
     }
     ssd1306_init();
 
+   
+    
     set_screen();
-    set_screen_freq(get_speed());
+    set_auto();
     set_screen_mode(get_mode());
+    set_screen_freq(get_speed());
     set_screen_temp(read_temp(fd_temp));
     set_screen_duty(0);
 
@@ -238,7 +252,6 @@ int main()
             uint64_t temp;
             read(k1, &temp, sizeof(temp));
             (get_mode() == manual) ? set_auto() : set_manual();
-            set_drv_mode(get_mode());
             set_screen_mode(get_mode());
             if(get_mode()==automatic){
                 set_screen_freq(get_speed());
@@ -248,6 +261,14 @@ int main()
         free(info);
         close(fd_temp);
     }
+
+    return 0;
+}
+
+
+int main(){
+ 
+   process();
 
     return 0;
 }
