@@ -209,9 +209,11 @@ int process()
     register_fd_event(epollfd, fd_temp, EPOLLIN | EPOLLET, &etemp);
     struct mq_attr mqatt;
     mq_getattr(mqd, &mqatt);
+    
+    char* info = (char*)malloc(sizeof(char) * MAX_LEN);
 
     while (true) {
-        char* info = (char*)malloc(sizeof(char) * MAX_LEN);
+    
         int nfds   = epoll_wait(epollfd, &ret, 1, -1);
         if (nfds == -1) {
             perror("epoll_wait");
@@ -222,7 +224,13 @@ int process()
             // receive from client program
             int recvlen = mq_receive(mqd, info, mqatt.mq_msgsize, NULL);
             if (recvlen != -1) {
-                printf("%s\n", info);
+                if(strncmp("automatic", info, strlen(info))){
+                     set_auto();
+                     set_screen_mode(get_mode());
+                }else {
+                    set_manual();
+                     set_screen_mode(get_mode());
+                }
             }
 
         } else if (ret.data.fd == fd_temp) {
@@ -258,9 +266,11 @@ int process()
             }
         }
 
-        free(info);
+       
         close(fd_temp);
     }
+
+    free(info);
 
     return 0;
 }
