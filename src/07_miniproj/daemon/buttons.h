@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <errno.h>
 #include <fcntl.h>
@@ -8,18 +8,18 @@
 #include <sys/stat.h>
 #include <sys/timerfd.h>
 #include <sys/types.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
-#include <syslog.h>
-
-
 
 int open_gpio(char* id, char* file, char* direction, char* edge);
 
 int create_epoll();
 
-int register_fd_event(int epfd, int fd, enum EPOLL_EVENTS ev, struct epoll_event* event);
-
+int register_fd_event(int epfd,
+                      int fd,
+                      enum EPOLL_EVENTS ev,
+                      struct epoll_event* event);
 
 int create_tfd();
 int set_tfd_interval(int tfd, long sec, long nsec);
