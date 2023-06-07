@@ -117,6 +117,16 @@ int set_speed_down()
     return speed[idx];
 }
 
+void set_speed(int val){
+    for(int i = 0; i < SPEED_ARR_SIZE; i++){
+        if(speed[i] == val){
+            idx = i;
+            break;
+            }
+       }
+    set_drv_speed(speed[idx]);   
+}
+
 int read_temp()
 {
     int fd_temp = open(TEMP_PATH, O_RDONLY);
@@ -183,6 +193,12 @@ void set_screen_duty(int duty)
     ssd1306_puts("%");
 }
 
+
+struct Param {
+    char mode[100];
+    int value;
+};
+
 int process()
 {
 
@@ -228,7 +244,6 @@ int process()
     struct mq_attr mqatt;
     mq_getattr(mqd, &mqatt);
     
-    char* info = (char*)malloc(sizeof(char) * MAX_LEN);
 
     while (true) {
     
@@ -240,21 +255,27 @@ int process()
 
         if (ret.data.fd == mqd) {
             // receive from client program
-            int recvlen = mq_receive(mqd, info, mqatt.mq_msgsize, NULL);
+           
+            char buff[sizeof(struct Param)+1];
+            int recvlen = mq_receive(mqd, buff, mqatt.mq_msgsize, NULL);
             if (recvlen != -1) {
-                if(strncmp("automatic", info, strlen("automatic")) == 0){
+                 struct Param * param = (struct Param*)buff;
+                if(strncmp("automatic", param->mode, strlen("automatic")) == 0){
                      set_auto();
                      set_screen_mode(automatic);
                      set_screen_freq(get_speed());
                      set_screen_duty(get_duty_cycle());
 
-                }else if(strncmp("manual", info, strlen("manual")) == 0){
+                }else if(strncmp("manual", param->mode, strlen("manual")) == 0){
                      set_manual();
+                     set_speed(param->value);
                      set_screen_mode(manual);
                      set_screen_freq(get_speed());
                      set_screen_duty(get_duty_cycle());
 
                 }
+            }else{
+                perror("error fetching");
             }
 
         } else if (ret.data.fd == tfd) {
@@ -300,7 +321,6 @@ int process()
         
     }
 
-    free(info);
 
     return 0;
 }
