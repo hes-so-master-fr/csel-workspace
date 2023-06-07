@@ -1,0 +1,20 @@
+#!/bin/sh
+#
+# Application daemon
+#
+case "$1" in
+        start)
+        mount -a
+        insmod /root/module/fandriver.ko
+        /app/cooling_daemon
+        ;;
+        stop)
+        ;;
+        restart|reload)
+        ;;
+        *)
+        echo $"Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+echo "Services launched"
+exit $?

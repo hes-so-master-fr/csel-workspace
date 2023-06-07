@@ -4,12 +4,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+#include <syslog.h>
+#include <pwd.h>
 
 #include "../oled/ssd1306.h"
 #include "buttons.h"
 
 #define MAX_LEN 2000
 #define SPEED_ARR_SIZE 4
+
+#define UNUSED(x) (void)(x)
 
 #define GPIO_LED "/sys/class/gpio/gpio10"
 #define GPIO_K1 "/sys/class/gpio/gpio0"
@@ -30,32 +35,34 @@ enum mode { manual, automatic };
 // current
 enum mode current;
 // speed
-const int size            = SPEED_ARR_SIZE;
-int speed[SPEED_ARR_SIZE] = {2, 5, 10, 20};
+const int size             = SPEED_ARR_SIZE;
+int speed[SPEED_ARR_SIZE]  = {2, 5, 10, 20};
 int cycles[SPEED_ARR_SIZE] = {25, 50, 75, 100};
-int idx = 0;
+int idx                    = 0;
 
-void set_drv_mode(enum mode mode_to_set) {
+void set_drv_mode(enum mode mode_to_set)
+{
     char* curmode = (mode_to_set == manual) ? "manual\n" : "automatic\n";
-    int fd = open(MODE_PATH, O_WRONLY);
+    int fd        = open(MODE_PATH, O_WRONLY);
     write(fd, curmode, strlen(curmode));
     close(fd);
-
 }
 
-void set_drv_speed(int curr_speed) {
+void set_drv_speed(int curr_speed)
+{
     char str_speed[10];
     sprintf(str_speed, "%d", curr_speed);
-    int fd = open(SPEED_PATH, O_WRONLY);
+    int fd        = open(SPEED_PATH, O_WRONLY);
     str_speed[10] = '\n';
     write(fd, str_speed, strlen(str_speed));
     close(fd);
 }
 
-int get_drv_speed() {
+int get_drv_speed()
+{
     char sspeed[10];
     int ispeed = 0;
-    int fd = open(SPEED_PATH, O_RDONLY);
+    int fd     = open(SPEED_PATH, O_RDONLY);
     if (fd != -1) {
         read(fd, &sspeed, sizeof(sspeed));
         ispeed = atoi(sspeed);
@@ -64,41 +71,38 @@ int get_drv_speed() {
     return ispeed;
 }
 
-
 enum mode get_mode() { return current; }
 
-
-void set_auto() { 
-current = automatic; 
-set_drv_mode(automatic);
- }
-
-void set_manual() { 
-current = manual; 
-idx=0;
-set_drv_mode(manual); 
+void set_auto()
+{
+    current = automatic;
+    set_drv_mode(automatic);
 }
 
+void set_manual()
+{
+    current = manual;
+    idx     = 0;
+    set_drv_mode(manual);
+}
 
- int get_speed() { 
-    if(get_mode()== automatic){
-       int val = get_drv_speed(); 
-       for(int i = 0; i < SPEED_ARR_SIZE; i++){
-            if(speed[i] == val){
+int get_speed()
+{
+    if (get_mode() == automatic) {
+        int val = get_drv_speed();
+        for (int i = 0; i < SPEED_ARR_SIZE; i++) {
+            if (speed[i] == val) {
                 idx = i;
                 break;
             }
-       }
-        
+        }
     }
-    return speed[idx]; 
-    }
+    return speed[idx];
+}
 
- int get_duty_cycle(){
-     return cycles[idx];
- }   
+int get_duty_cycle() { return cycles[idx]; }
 
- int set_speed_up()
+int set_speed_up()
 {
     if (idx == size - 1) {
         return speed[idx];
@@ -117,14 +121,15 @@ int set_speed_down()
     return speed[idx];
 }
 
-void set_speed(int val){
-    for(int i = 0; i < SPEED_ARR_SIZE; i++){
-        if(speed[i] == val){
+void set_speed(int val)
+{
+    for (int i = 0; i < SPEED_ARR_SIZE; i++) {
+        if (speed[i] == val) {
             idx = i;
             break;
-            }
-       }
-    set_drv_speed(speed[idx]);   
+        }
+    }
+    set_drv_speed(speed[idx]);
 }
 
 int read_temp()
@@ -144,7 +149,7 @@ int read_temp()
     return temp;
 }
 
- void set_screen()
+void set_screen()
 {
     ssd1306_set_position(0, 0);
     ssd1306_puts("-System Status-");
@@ -173,7 +178,7 @@ static void set_screen_temp(int temp)
     ssd1306_puts("'C");
 }
 
- void set_screen_freq(int freq)
+void set_screen_freq(int freq)
 {
     ssd1306_set_position(0, 5);
     char freq_buf[50];
@@ -193,7 +198,6 @@ void set_screen_duty(int duty)
     ssd1306_puts("%");
 }
 
-
 struct Param {
     char mode[100];
     int value;
@@ -201,14 +205,10 @@ struct Param {
 
 int process()
 {
+    long init_period = 50;  // ms
 
-    long init_period = 50; // ms
-
-   
     ssd1306_init();
 
-   
-    
     set_screen();
     set_auto();
     set_screen_mode(get_mode());
@@ -243,11 +243,9 @@ int process()
     register_fd_event(epollfd, tfd, EPOLLIN, &etemp);
     struct mq_attr mqatt;
     mq_getattr(mqd, &mqatt);
-    
 
     while (true) {
-    
-        int nfds   = epoll_wait(epollfd, &ret, 1, -1);
+        int nfds = epoll_wait(epollfd, &ret, 1, -1);
         if (nfds == -1) {
             perror("epoll_wait");
             exit(EXIT_FAILURE);
@@ -255,26 +253,27 @@ int process()
 
         if (ret.data.fd == mqd) {
             // receive from client program
-           
-            char buff[sizeof(struct Param)+1];
+
+            char buff[sizeof(struct Param) + 1];
             int recvlen = mq_receive(mqd, buff, mqatt.mq_msgsize, NULL);
             if (recvlen != -1) {
-                 struct Param * param = (struct Param*)buff;
-                if(strncmp("automatic", param->mode, strlen("automatic")) == 0){
-                     set_auto();
-                     set_screen_mode(automatic);
-                     set_screen_freq(get_speed());
-                     set_screen_duty(get_duty_cycle());
+                struct Param* param = (struct Param*)buff;
+                if (strncmp("automatic", param->mode, strlen("automatic")) ==
+                    0) {
+                    set_auto();
+                    set_screen_mode(automatic);
+                    set_screen_freq(get_speed());
+                    set_screen_duty(get_duty_cycle());
 
-                }else if(strncmp("manual", param->mode, strlen("manual")) == 0){
-                     set_manual();
-                     set_speed(param->value);
-                     set_screen_mode(manual);
-                     set_screen_freq(get_speed());
-                     set_screen_duty(get_duty_cycle());
-
+                } else if (strncmp("manual", param->mode, strlen("manual")) ==
+                           0) {
+                    set_manual();
+                    set_speed(param->value);
+                    set_screen_mode(manual);
+                    set_screen_freq(get_speed());
+                    set_screen_duty(get_duty_cycle());
                 }
-            }else{
+            } else {
                 perror("error fetching");
             }
 
@@ -292,7 +291,6 @@ int process()
                 set_drv_speed(get_speed());
                 set_screen_freq(get_speed());
                 set_screen_duty(get_duty_cycle());
-
             }
         } else if (ret.data.fd == k2) {
             // put speed down
@@ -303,7 +301,6 @@ int process()
                 set_drv_speed(get_speed());
                 set_screen_freq(get_speed());
                 set_screen_duty(get_duty_cycle());
-
             }
 
         } else if (ret.data.fd == k3) {
@@ -314,21 +311,115 @@ int process()
             set_screen_mode(get_mode());
             set_screen_freq(get_speed());
             set_screen_duty(get_duty_cycle());
-            }
-        
-
-       
-        
+        }
     }
-
 
     return 0;
 }
 
 
-int main(){
- 
-   process();
+static void fork_process()
+{
+	pid_t pid = fork();
+	switch (pid) {
+	case  0: break; // child process has been created
+	case -1: syslog (LOG_ERR, "ERROR while forking"); exit (1); break;
+	default: exit(0);  // exit parent process with success
+	}
+}
+
+static int signal_catched = 0;
+
+static void catch_signal (int signal)
+{
+	syslog (LOG_INFO, "signal=%d catched\n", signal);
+	signal_catched++;
+}
+
+
+int main(int argc, char* argv[])
+{
+  UNUSED(argc); UNUSED(argv);
+
+	// 1. fork off the parent process
+	fork_process();
+
+	// 2. create new session
+	if (setsid() == -1) {
+		syslog (LOG_ERR, "ERROR while creating new session");
+		exit (1);
+	}
+
+	// 3. fork again to get rid of session leading process
+	fork_process();
+
+	// 4. capture all required signals
+	struct sigaction act = {.sa_handler = catch_signal,};
+	sigaction (SIGHUP,  &act, NULL);  //  1 - hangup
+	sigaction (SIGINT,  &act, NULL);  //  2 - terminal interrupt
+	sigaction (SIGQUIT, &act, NULL);  //  3 - terminal quit
+	sigaction (SIGABRT, &act, NULL);  //  6 - abort
+	sigaction (SIGTERM, &act, NULL);  // 15 - termination
+	sigaction (SIGTSTP, &act, NULL);  // 19 - terminal stop signal
+
+	// 5. update file mode creation mask
+	umask(0027);
+
+	// 6. change working directory to appropriate place
+	if (chdir ("/") == -1) {
+		syslog (LOG_ERR, "ERROR while changing to working directory");
+		exit (1);
+	}
+
+	// 7. close all open file descriptors
+	for (int fd = sysconf(_SC_OPEN_MAX); fd >= 0; fd--) {
+		close (fd);
+	}
+
+	// 8. redirect stdin, stdout and stderr to /dev/null
+	if (open ("/dev/null", O_RDWR) != STDIN_FILENO) {
+		syslog (LOG_ERR, "ERROR while opening '/dev/null' for stdin");
+		exit (1);
+	}
+	if (dup2 (STDIN_FILENO, STDOUT_FILENO) != STDOUT_FILENO) {
+		syslog (LOG_ERR, "ERROR while opening '/dev/null' for stdout");
+		exit (1);
+	}
+	if (dup2 (STDIN_FILENO, STDERR_FILENO) != STDERR_FILENO) {
+		syslog (LOG_ERR, "ERROR while opening '/dev/null' for stderr");
+		exit (1);
+	}
+
+	// 9. option: open syslog for message logging
+	openlog (NULL, LOG_NDELAY | LOG_PID, LOG_DAEMON);
+	syslog (LOG_INFO, "Daemon has started...");
+
+	// 10. option: get effective user and group id for appropriate's one
+	struct passwd* pwd = getpwnam ("root");
+	if (pwd == 0) {
+		syslog (LOG_ERR, "ERROR while reading daemon password file entry");
+		exit (1);
+	}
+
+	// 11. option: change root directory
+	if (chroot (".") == -1) {
+		syslog (LOG_ERR, "ERROR while changing to new root directory");
+		exit (1);
+	}
+
+	// 12. option: change effective user and group id for appropriate's one
+	if (setegid (pwd->pw_gid) == -1) {
+		syslog (LOG_ERR, "ERROR while setting new effective group id");
+		exit (1);
+	}
+	if (seteuid (pwd->pw_uid) == -1) {
+		syslog (LOG_ERR, "ERROR while setting new effective user id");
+		exit (1);
+	}
+
+  
+
+    process();
 
     return 0;
 }
