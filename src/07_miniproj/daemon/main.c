@@ -32,7 +32,8 @@ enum mode current;
 // speed
 const int size            = SPEED_ARR_SIZE;
 int speed[SPEED_ARR_SIZE] = {2, 5, 10, 20};
-int idx;
+int cycles[SPEED_ARR_SIZE] = {25, 50, 75, 100};
+int idx = 0;
 
 void set_drv_mode(enum mode mode_to_set) {
     char* curmode = (mode_to_set == manual) ? "manual\n" : "automatic\n";
@@ -69,7 +70,6 @@ enum mode get_mode() { return current; }
 
 void set_auto() { 
 current = automatic; 
-idx=SPEED_ARR_SIZE;
 set_drv_mode(automatic);
  }
 
@@ -82,10 +82,21 @@ set_drv_mode(manual);
 
  int get_speed() { 
     if(get_mode()== automatic){
-        return get_drv_speed();
+       int val = get_drv_speed(); 
+       for(int i = 0; i < SPEED_ARR_SIZE; i++){
+            if(speed[i] == val){
+                idx = i;
+                break;
+            }
+       }
+        
     }
     return speed[idx]; 
     }
+
+ int get_duty_cycle(){
+     return cycles[idx];
+ }   
 
  int set_speed_up()
 {
@@ -106,15 +117,20 @@ int set_speed_down()
     return speed[idx];
 }
 
-int read_temp(int fd)
+int read_temp()
 {
+    int fd_temp = open(TEMP_PATH, O_RDONLY);
+    if (fd_temp == -1) {
+        perror("error: opening temp file");
+    }
     char stemp[10];
     int temp = 0;
-    if (fd != -1) {
-        read(fd, &stemp, sizeof(stemp));
+    if (fd_temp != -1) {
+        read(fd_temp, &stemp, sizeof(stemp));
         temp = atoi(stemp);
         temp /= 1000;  // represent in degrees
     }
+    close(fd_temp);
     return temp;
 }
 
@@ -169,10 +185,10 @@ void set_screen_duty(int duty)
 
 int process()
 {
-    int fd_temp = open(TEMP_PATH, O_RDONLY);
-    if (fd_temp == -1) {
-        perror("error: opening temp file");
-    }
+
+    long init_period = 50; // ms
+
+   
     ssd1306_init();
 
    
@@ -181,14 +197,16 @@ int process()
     set_auto();
     set_screen_mode(get_mode());
     set_screen_freq(get_speed());
-    set_screen_temp(read_temp(fd_temp));
-    set_screen_duty(0);
+    set_screen_duty(get_duty_cycle());
 
     int k1 = open_gpio(K1, GPIO_K1, "in", "rising");
     int k2 = open_gpio(K2, GPIO_K2, "in", "rising");
     int k3 = open_gpio(K3, GPIO_K3, "in", "rising");
 
     struct epoll_event ret, evk1, evk2, evk3, emq, etemp;
+
+    int tfd = create_tfd();
+    set_tfd_freq(tfd, init_period);
 
     // create epoll
     int epollfd = create_epoll();
@@ -206,7 +224,7 @@ int process()
     // register message queue to epoll
     register_fd_event(epollfd, mqd, EPOLLIN | EPOLLET, &emq);
     // register temperature file
-    register_fd_event(epollfd, fd_temp, EPOLLIN | EPOLLET, &etemp);
+    register_fd_event(epollfd, tfd, EPOLLIN, &etemp);
     struct mq_attr mqatt;
     mq_getattr(mqd, &mqatt);
     
@@ -227,16 +245,23 @@ int process()
                 if(strncmp("automatic", info, strlen("automatic")) == 0){
                      set_auto();
                      set_screen_mode(automatic);
-                }
-                if(strncmp("manual", info, strlen("manual")) == 0){
-                      set_manual();
+                     set_screen_freq(get_speed());
+                     set_screen_duty(get_duty_cycle());
+
+                }else if(strncmp("manual", info, strlen("manual")) == 0){
+                     set_manual();
                      set_screen_mode(manual);
+                     set_screen_freq(get_speed());
+                     set_screen_duty(get_duty_cycle());
+
                 }
             }
 
-        } else if (ret.data.fd == fd_temp) {
+        } else if (ret.data.fd == tfd) {
             // update temperature
-            set_screen_temp(read_temp(fd_temp));
+            uint64_t temp;
+            read(tfd, &temp, sizeof(temp));
+            set_screen_temp(read_temp());
         } else if (ret.data.fd == k1) {
             // put speed up
             uint64_t temp;
@@ -245,6 +270,8 @@ int process()
                 set_speed_up();
                 set_drv_speed(get_speed());
                 set_screen_freq(get_speed());
+                set_screen_duty(get_duty_cycle());
+
             }
         } else if (ret.data.fd == k2) {
             // put speed down
@@ -254,6 +281,8 @@ int process()
                 set_speed_down();
                 set_drv_speed(get_speed());
                 set_screen_freq(get_speed());
+                set_screen_duty(get_duty_cycle());
+
             }
 
         } else if (ret.data.fd == k3) {
@@ -262,13 +291,13 @@ int process()
             read(k1, &temp, sizeof(temp));
             (get_mode() == manual) ? set_auto() : set_manual();
             set_screen_mode(get_mode());
-            if(get_mode()==automatic){
-                set_screen_freq(get_speed());
+            set_screen_freq(get_speed());
+            set_screen_duty(get_duty_cycle());
             }
-        }
+        
 
        
-        close(fd_temp);
+        
     }
 
     free(info);
