@@ -498,6 +498,7 @@ int process()
             uint64_t temp;
             read(k1, &temp, sizeof(temp));
             (get_mode() == manual) ? set_auto() : set_manual();
+             set_drv_speed(get_speed());
         }
     }
 
