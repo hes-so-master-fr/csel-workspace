@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include  <stdlib.h>
-#define PATH_QUEUE "/screenqueue"
+#define PATH_QUEUE "/clientqueue"
 
 struct Param {
     char mode[100];
